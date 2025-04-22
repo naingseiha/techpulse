@@ -3,9 +3,16 @@ import mongoose from "mongoose";
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-  throw new Error("Please define the MONGODB_URI environment variable");
+  throw new Error(
+    "Please define the MONGODB_URI environment variable in .env.local"
+  );
 }
 
+/**
+ * Global is used here to maintain a cached connection across hot reloads
+ * in development. This prevents connections growing exponentially
+ * during API Route usage.
+ */
 let cached = global.mongoose;
 
 if (!cached) {
@@ -25,10 +32,22 @@ async function dbConnect() {
     cached.promise = mongoose
       .connect(MONGODB_URI as string, opts)
       .then((mongoose) => {
+        console.log("Connected to MongoDB");
         return mongoose;
+      })
+      .catch((error) => {
+        console.error("Error connecting to MongoDB:", error);
+        throw error;
       });
   }
-  cached.conn = await cached.promise;
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
   return cached.conn;
 }
 
